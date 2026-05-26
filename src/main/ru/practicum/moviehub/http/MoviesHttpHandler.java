@@ -3,9 +3,9 @@ package ru.practicum.moviehub.http;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import ru.practicum.moviehub.api.ErrorResponse;
+import ru.practicum.moviehub.api.IdAlreadyExistsException;
 import ru.practicum.moviehub.api.MovieAlreadyExistsException;
 import ru.practicum.moviehub.api.MovieNotFoundException;
-import ru.practicum.moviehub.api.idAlreadyExistsException;
 import ru.practicum.moviehub.model.Movie;
 import ru.practicum.moviehub.store.MoviesStore;
 
@@ -35,7 +35,7 @@ public class MoviesHttpHandler extends BaseHttpHandler {
             } else {
                 sendJson(ex, 405, gson.toJson(new ErrorResponse(405, "Метод не поддерживается")));
             }
-        } catch (idAlreadyExistsException e) {
+        } catch (IdAlreadyExistsException e) {
             sendJson(ex, 409, gson.toJson(new ErrorResponse(409, "Этот ID уже занят")));
         } catch (MovieNotFoundException e) {
             sendJson(ex, 404, gson.toJson(new ErrorResponse(404, "Такого фильма нет в списке")));
