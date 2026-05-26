@@ -2,7 +2,9 @@ package ru.practicum.moviehub.http;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import ru.practicum.moviehub.model.Movie;
 import ru.practicum.moviehub.store.MoviesStore;
 
@@ -18,13 +20,13 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class MoviesApiTest {
-    private static final String BASE = "http://localhost:8080";
-    private static MoviesServer server;
-    private static HttpClient client;
-    private static Gson gson;
+    private static final String BASE_URL = "http://localhost:8080";
+    private MoviesServer server;
+    private HttpClient client;
+    private Gson gson;
 
     @BeforeEach
-    void beforeEach() throws IOException {
+    void setUp() throws IOException {
         gson = new Gson();
         server = new MoviesServer(new MoviesStore(), 8080);
         server.start();
@@ -34,152 +36,153 @@ public class MoviesApiTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void tearDown() {
         server.stop();
     }
 
-
-    private long addMovie(Movie movie) throws IOException, InterruptedException {
+    private Movie addMovieAndReturn(Movie movie) throws IOException, InterruptedException {
         String json = gson.toJson(movie);
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies"))
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies"))
                 .POST(HttpRequest.BodyPublishers.ofString(json))
+                .header("Content-Type", "application/json")
                 .build();
 
-        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals("\"Фильм успешно добавлен в список\"", resp.body());
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertEquals(201, response.statusCode());
 
-
-        return 1;
+        return gson.fromJson(response.body(), Movie.class);
     }
 
     @Test
     void getMovies_whenEmpty_returnsEmptyArray() throws IOException, InterruptedException {
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies"))
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies"))
                 .GET()
                 .build();
 
-        HttpResponse<String> resp =
-                client.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        assertEquals(200, resp.statusCode(), "GET /movies должен вернуть 200");
+        assertEquals(200, response.statusCode());
+        assertEquals("application/json; charset=UTF-8",
+                response.headers().firstValue("Content-Type").orElse(""));
 
-        String contentTypeHeaderValue =
-                resp.headers().firstValue("Content-Type").orElse("");
-        assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue,
-                "Content-Type должен содержать формат данных и кодировку");
+        Type movieListType = new TypeToken<List<Movie>>() {}.getType();
+        List<Movie> movies = gson.fromJson(response.body(), movieListType);
 
-        String body = resp.body().trim();
-        assertTrue(body.startsWith("[") && body.endsWith("]"),
-                "Ожидается JSON-массив");
+        assertNotNull(movies);
+        assertTrue(movies.isEmpty());
     }
 
     @Test
-    void post_Movie_return_OK() throws IOException, InterruptedException {
-        Movie movie = new Movie("Новый фильм", 1990, 1);
-        addMovie(movie);
+    void postMovie_returnsCreated() throws IOException, InterruptedException {
+        Movie movie = new Movie("Новый фильм", 1990, 0); // ID = 0 означает "пусть сервер назначит"
+        Movie createdMovie = addMovieAndReturn(movie);
 
+        assertNotNull(createdMovie);
+        assertEquals(movie.getTitle(), createdMovie.getTitle());
+        assertEquals(movie.getYears(), createdMovie.getYears());
+        assertTrue(createdMovie.getId() > 0);
     }
 
     @Test
-    void post_Exists_Movie_returnError() throws IOException, InterruptedException {
-        Movie movie = new Movie("Новый фильм", 1990, 1);
-        addMovie(movie);
+    void postDuplicateMovie_returnsConflict() throws IOException, InterruptedException {
+        Movie movie = new Movie("Новый фильм", 1990, 0);
+        addMovieAndReturn(movie);
 
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies"))
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies"))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(movie)))
+                .header("Content-Type", "application/json")
                 .build();
 
-        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(409, resp.statusCode(), "Попытка добавить дубликат должна вернуть 400");
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        String contentTypeHeaderValue =
-                resp.headers().firstValue("Content-Type").orElse("");
-        assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue);
-        assertEquals("Фильм уже есть в списке", resp.body());
+        assertEquals(409, response.statusCode());
+        assertTrue(response.body().contains("Фильм уже есть в списке"));
     }
 
     @Test
-    void getMovie_by_id() throws IOException, InterruptedException {
-        Movie expectedMovie = new Movie("Новый фильм", 1990, 1);
-        long movieId = addMovie(expectedMovie);
+    void getMovieById_returnsMovie() throws IOException, InterruptedException {
+        Movie movie = new Movie("Новый фильм", 1990, 0);
+        Movie createdMovie = addMovieAndReturn(movie);
 
-        HttpRequest getReq = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies/" + movieId))
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies/" + createdMovie.getId()))
                 .GET()
                 .build();
 
-        HttpResponse<String> resp = client.send(getReq, HttpResponse.BodyHandlers.ofString());
-        assertEquals(200, resp.statusCode());
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        String contentTypeHeaderValue =
-                resp.headers().firstValue("Content-Type").orElse("");
-        assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue);
+        assertEquals(200, response.statusCode());
 
-        Movie actualMovie = gson.fromJson(resp.body(), Movie.class);
-        assertEquals(expectedMovie.getTitle(), actualMovie.getTitle());
-        assertEquals(expectedMovie.getYears(), actualMovie.getYears());
-
-        HttpRequest getReqNotExists = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies/999"))
-                .GET()
-                .build();
-        resp = client.send(getReqNotExists, HttpResponse.BodyHandlers.ofString());
-        assertEquals(404, resp.statusCode(), "Запрос по несуществующему ID должен вернуть 404");
-        assertEquals("Такого фильма нет в списке", resp.body());
+        Movie fetchedMovie = gson.fromJson(response.body(), Movie.class);
+        assertEquals(createdMovie.getId(), fetchedMovie.getId());
+        assertEquals(createdMovie.getTitle(), fetchedMovie.getTitle());
+        assertEquals(createdMovie.getYears(), fetchedMovie.getYears());
     }
 
     @Test
-    void deleteMovie_by_id() throws IOException, InterruptedException {
-        Movie movie = new Movie("Новый фильм", 1990, 1);
-        long movieId = addMovie(movie);
+    void getNonExistentMovie_returnsNotFound() throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies/99999"))
+                .GET()
+                .build();
 
-        HttpRequest deleteReq = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies/" + movieId))
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(404, response.statusCode());
+        assertTrue(response.body().contains("Такого фильма нет в списке"));
+    }
+
+    @Test
+    void deleteMovie_returnsNoContent() throws IOException, InterruptedException {
+        Movie movie = new Movie("Новый фильм", 1990, 0);
+        Movie createdMovie = addMovieAndReturn(movie);
+
+        HttpRequest deleteRequest = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies/" + createdMovie.getId()))
                 .DELETE()
                 .build();
 
-        HttpResponse<String> resp = client.send(deleteReq, HttpResponse.BodyHandlers.ofString());
-        assertEquals(201, resp.statusCode(), "DELETE должен вернуть 200");
-        assertEquals("Фильм успешно удалён", resp.body());
-    }
+        HttpResponse<String> deleteResponse = client.send(deleteRequest, HttpResponse.BodyHandlers.ofString());
+        assertEquals(204, deleteResponse.statusCode());
 
-    @Test
-    void returnAllMovies() throws IOException, InterruptedException {
-        Movie movie1 = new Movie("Первый фильм", 1990, 120);
-        Movie movie2 = new Movie("Второй фильм", 1992, 100);
-
-        addMovie(movie1);
-        addMovie(movie2);
-
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(BASE + "/movies"))
+        // Проверяем, что фильм действительно удалён
+        HttpRequest getRequest = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies/" + createdMovie.getId()))
                 .GET()
                 .build();
 
-        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-        assertEquals(200, resp.statusCode());
+        HttpResponse<String> getResponse = client.send(getRequest, HttpResponse.BodyHandlers.ofString());
+        assertEquals(404, getResponse.statusCode());
+    }
 
-        String contentTypeHeaderValue =
-                resp.headers().firstValue("Content-Type").orElse("");
-        assertEquals("application/json; charset=UTF-8", contentTypeHeaderValue);
+    @Test
+    void getAllMovies_returnsAllAddedMovies() throws IOException, InterruptedException {
+        Movie movie1 = new Movie("Первый фильм", 1990, 0);
+        Movie movie2 = new Movie("Второй фильм", 1992, 0);
 
-        // Безопасное парсинг списка фильмов
-        Type movieListType = new TypeToken<List<Movie>>(){}.getType();
-        List<Movie> actualMovies = gson.fromJson(resp.body(), movieListType);
+        addMovieAndReturn(movie1);
+        addMovieAndReturn(movie2);
 
-        assertEquals(2, actualMovies.size());
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/movies"))
+                .GET()
+                .build();
 
-        boolean movie1Exists = actualMovies.stream()
-                .anyMatch(m -> m.getTitle().equals(movie1.getTitle()) &&
-                        m.getYears() == movie1.getYears());
-        assertTrue(movie1Exists, "Первый фильм должен быть в списке");
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode());
 
-        boolean movie2Exists = actualMovies.stream()
-                .anyMatch(m -> m.getTitle().equals(movie2.getTitle()) &&
-                        m.getYears() == movie2.getYears());
-        assertTrue(movie2Exists, "Второй фильм должен быть в списке");
+        Type movieListType = new TypeToken<List<Movie>>() {}.getType();
+        List<Movie> movies = gson.fromJson(response.body(), movieListType);
+
+        assertEquals(2, movies.size());
+
+        boolean hasMovie1 = movies.stream().anyMatch(m -> m.getTitle().equals("Первый фильм"));
+        boolean hasMovie2 = movies.stream().anyMatch(m -> m.getTitle().equals("Второй фильм"));
+
+        assertTrue(hasMovie1);
+        assertTrue(hasMovie2);
     }
 }

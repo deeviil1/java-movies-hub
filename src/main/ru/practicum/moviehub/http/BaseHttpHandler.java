@@ -9,11 +9,11 @@ import java.nio.charset.StandardCharsets;
 
 public abstract class BaseHttpHandler implements HttpHandler {
 
-    protected static final String jsonString = "application/json; charset=UTF-8"; // !!! Укажите содержимое заголовка Content-Type
+    protected static final String APPLICATION_JSON = "application/json; charset=UTF-8";
 
     protected void sendJson(HttpExchange ex, int status, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", jsonString);
+        ex.getResponseHeaders().set("Content-Type", APPLICATION_JSON);
         ex.sendResponseHeaders(status, bytes.length);
 
         try (OutputStream os = ex.getResponseBody()) {
@@ -23,9 +23,8 @@ public abstract class BaseHttpHandler implements HttpHandler {
     }
 
     protected void sendNoContent(HttpExchange ex) throws IOException {
-        ex.getResponseHeaders().set("Content-Type", jsonString);
-        // !!! Реализуйте общий для всех хендлеров метод
-        // для отправки ответа без тела и кодом 204
-        ex.sendResponseHeaders(204, 0);
+        ex.getResponseHeaders().set("Content-Type", APPLICATION_JSON);
+        ex.sendResponseHeaders(204, -1);
+        ex.getResponseBody().close();
     }
 }
