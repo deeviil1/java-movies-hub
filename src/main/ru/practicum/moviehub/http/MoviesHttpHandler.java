@@ -13,6 +13,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public class MoviesHttpHandler extends BaseHttpHandler {
+    private static final String GET_METHOD = "GET";
+    private static final String POST_METHOD = "POST";
+    private static final String DELETE_METHOD = "DELETE";
+    private static final int ID_PATH_SEGMENT_INDEX = 2;
+
     private final MoviesStore movieStore;
     private final Gson gson = new Gson();
 
@@ -26,11 +31,11 @@ public class MoviesHttpHandler extends BaseHttpHandler {
         String path = ex.getRequestURI().toString();
 
         try {
-            if (method.equalsIgnoreCase("GET")) {
+            if (method.equalsIgnoreCase(GET_METHOD)) {
                 handleGet(ex, path);
-            } else if (method.equalsIgnoreCase("POST")) {
+            } else if (method.equalsIgnoreCase(POST_METHOD)) {
                 handlePost(ex, path);
-            } else if (method.equalsIgnoreCase("DELETE")) {
+            } else if (method.equalsIgnoreCase(DELETE_METHOD)) {
                 handleDelete(ex, path);
             } else {
                 sendJson(ex, 405, gson.toJson(new ErrorResponse(405, "Метод не поддерживается")));
@@ -50,7 +55,7 @@ public class MoviesHttpHandler extends BaseHttpHandler {
         if (path.equals("/movies")) {
             sendJson(ex, 200, gson.toJson(movieStore.getAllMovies()));
         } else if (path.matches("/movies/\\d+")) {
-            int id = Integer.parseInt(path.split("/")[2]);
+            int id = Integer.parseInt(path.split("/")[ID_PATH_SEGMENT_INDEX]);
             Movie movie = movieStore.findMovie(id);
             sendJson(ex, 200, gson.toJson(movie));
         } else {

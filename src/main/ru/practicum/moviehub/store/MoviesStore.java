@@ -1,6 +1,5 @@
 package ru.practicum.moviehub.store;
 
-
 import ru.practicum.moviehub.api.IdAlreadyExistsException;
 import ru.practicum.moviehub.api.MovieAlreadyExistsException;
 import ru.practicum.moviehub.api.MovieNotFoundException;
@@ -9,17 +8,18 @@ import ru.practicum.moviehub.model.Movie;
 import java.util.ArrayList;
 import java.util.List;
 
-
 public class MoviesStore {
+    private static final int DEFAULT_ID_VALUE = 0;
+    private static final int ID_INCREMENT = 1;
+
     private final List<Movie> movies = new ArrayList<>();
-    private int nextId = 1;
+    private int nextId = ID_INCREMENT;
 
     public List<Movie> getAllMovies() {
-        return new ArrayList<>(movies); // Возвращаем копию для безопасности
+        return new ArrayList<>(movies);
     }
 
     public Movie addMovie(Movie movie) {
-
         boolean titleExists = movies.stream()
                 .anyMatch(existingMovie -> existingMovie.getTitle().equals(movie.getTitle()));
 
@@ -27,8 +27,7 @@ public class MoviesStore {
             throw new MovieAlreadyExistsException("Фильм с таким названием уже есть в списке");
         }
 
-
-        if (movie.getId() != 0) {
+        if (movie.getId() != DEFAULT_ID_VALUE) {
             boolean idExists = movies.stream()
                     .anyMatch(existingMovie -> existingMovie.getId() == movie.getId());
             if (idExists) {
@@ -36,12 +35,12 @@ public class MoviesStore {
             }
         }
 
-
-        if (movie.getId() == 0) {
-            movie.setId(nextId++);
+        if (movie.getId() == DEFAULT_ID_VALUE) {
+            movie.setId(nextId);
+            nextId += ID_INCREMENT;
         } else {
             if (movie.getId() >= nextId) {
-                nextId = movie.getId() + 1;
+                nextId = movie.getId() + ID_INCREMENT;
             }
         }
 
@@ -57,7 +56,7 @@ public class MoviesStore {
     }
 
     public void deleteMovieById(int id) {
-        Movie movieToDelete = findMovie(id); // Используем findMovie для проверки существования
+        Movie movieToDelete = findMovie(id);
         movies.remove(movieToDelete);
     }
 }
